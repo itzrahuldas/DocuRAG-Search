@@ -9,6 +9,10 @@
 
 ---
 
+![DocuRAG-Search Demo](assets/demo.png)
+
+---
+
 ## 🚀 What is DocuRAG-Search?
 
 DocuRAG-Search is an intelligent document Q&A system that lets you upload PDFs and ask natural language questions about their content. It uses:
