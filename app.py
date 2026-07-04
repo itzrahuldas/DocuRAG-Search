@@ -16,7 +16,7 @@ load_dotenv()
 # Import our backend modules
 from src.ingestion import process_uploaded_pdf
 from src.embeddings import create_vector_store, load_vector_store
-from src.chain import create_rag_chain, ask_question
+from src.chain import ask_question, GROQ_MODEL
 
 def initialize_session_state():
     """Initialize session state variables if they don't exist."""
@@ -24,8 +24,6 @@ def initialize_session_state():
         st.session_state.messages = []
     if "vectorstore" not in st.session_state:
         st.session_state.vectorstore = None
-    if "rag_chain" not in st.session_state:
-        st.session_state.rag_chain = None
     if "current_file" not in st.session_state:
         st.session_state.current_file = None
         
@@ -45,9 +43,6 @@ def process_pdf(uploaded_file):
             vectorstore = create_vector_store(chunks)
             st.session_state.vectorstore = vectorstore
             st.session_state.current_file = filename
-            
-            # Initialize RAG chain
-            st.session_state.rag_chain = create_rag_chain(vectorstore)
             
         st.success(f"Ready! You can now ask questions about '{filename}'.")
         
@@ -88,18 +83,17 @@ def main():
                 vs = load_vector_store()
                 if vs:
                     st.session_state.vectorstore = vs
-                    st.session_state.rag_chain = create_rag_chain(vs)
                     st.session_state.current_file = "Loaded from disk"
                     st.success("Loaded existing vector database.")
                     
         st.divider()
         st.markdown("### About")
-        st.markdown("""
+        st.markdown(f"""
         **Tech Stack:**
         - 🦜🔗 LangChain
         - 🧠 FAISS
         - 🤗 HuggingFace
-        - ⚡ Groq (Llama 3)
+        - ⚡ Groq (`{GROQ_MODEL}`)
         - 👑 Streamlit
         """)
         
@@ -125,7 +119,7 @@ def main():
 
     # Chat Input
     if prompt := st.chat_input("Ask a question about the document..."):
-        if not st.session_state.rag_chain:
+        if not st.session_state.vectorstore:
             st.warning("Please upload a PDF first!")
             return
             
@@ -142,8 +136,8 @@ def main():
             
             with st.spinner("Thinking..."):
                 try:
-                    # Query the RAG chain
-                    result = ask_question(st.session_state.rag_chain, prompt)
+                    # Query directly using vectorstore — chain is built fresh each time
+                    result = ask_question(st.session_state.vectorstore, prompt)
                     
                     answer = result["answer"]
                     sources = result["sources"]

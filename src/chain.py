@@ -10,6 +10,9 @@ from typing import List, Dict, Any
 # Load environment variables
 load_dotenv()
 
+# Model to use — check https://console.groq.com/docs/models for latest
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+
 def get_llm():
     """
     Initialize the Groq LLM.
@@ -21,7 +24,7 @@ def get_llm():
         
     return ChatGroq(
         temperature=0,
-        model_name="llama-3.1-8b-instant",  # Updated to supported model
+        model_name=GROQ_MODEL,
         api_key=api_key
     )
 
@@ -29,13 +32,12 @@ def format_docs(docs: List[Document]) -> str:
     """Format retrieved documents into a single context string."""
     return "\n\n".join(doc.page_content for doc in docs)
 
-def create_rag_chain(vectorstore):
+def build_rag_chain(retriever):
     """
-    Create a Retrieval-Augmented Generation (RAG) chain using LCEL.
-    Returns a tuple: (chain, retriever) so we can also fetch sources.
+    Build a fresh RAG chain from a retriever using LCEL.
+    Called every time we need a chain to avoid stale cached objects.
     """
     llm = get_llm()
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
     # Prompt template
     prompt = ChatPromptTemplate.from_messages([
@@ -48,7 +50,7 @@ def create_rag_chain(vectorstore):
         ("human", "{question}"),
     ])
 
-    # LCEL chain: retrieve → format → prompt → llm → parse
+    # LCEL chain: retrieve -> format -> prompt -> llm -> parse
     rag_chain = (
         {"context": retriever | format_docs, "question": RunnablePassthrough()}
         | prompt
@@ -56,14 +58,17 @@ def create_rag_chain(vectorstore):
         | StrOutputParser()
     )
 
-    # Return both the answer chain and the retriever so we can fetch sources separately
-    return rag_chain, retriever
+    return rag_chain
 
-def ask_question(rag_chain_tuple, question: str) -> Dict[str, Any]:
+def ask_question(vectorstore, question: str) -> Dict[str, Any]:
     """
-    Ask a question using the RAG chain and return the answer and source documents.
+    Ask a question by building a fresh chain each time.
+    This avoids stale model/chain issues from Streamlit session caching.
     """
-    rag_chain, retriever = rag_chain_tuple
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    
+    # Build a fresh chain every call — the LLM init is cheap
+    rag_chain = build_rag_chain(retriever)
 
     # Get the answer
     answer = rag_chain.invoke(question)
@@ -79,19 +84,18 @@ def ask_question(rag_chain_tuple, question: str) -> Dict[str, Any]:
 if __name__ == "__main__":
     # Smoke test
     print("Testing RAG Chain...")
+    print(f"Using model: {GROQ_MODEL}")
     from embeddings import load_vector_store
 
     try:
         vs = load_vector_store()
         if vs:
             print("1. Vector store loaded.")
-            print("2. Creating RAG chain...")
-            chain_tuple = create_rag_chain(vs)
 
             question = "What is the candidate's name?"
-            print(f"3. Asking question: {question}")
+            print(f"2. Asking question: {question}")
 
-            result = ask_question(chain_tuple, question)
+            result = ask_question(vs, question)
             print("\nAnswer:")
             print(result["answer"])
 
