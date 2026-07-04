@@ -21,7 +21,7 @@ def get_llm():
         
     return ChatGroq(
         temperature=0,
-        model_name="llama3-8b-8192",  # Fast and capable free model
+        model_name="llama-3.1-8b-instant",  # Updated to supported model
         api_key=api_key
     )
 
